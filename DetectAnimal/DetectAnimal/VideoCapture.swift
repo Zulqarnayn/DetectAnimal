@@ -22,6 +22,9 @@ public class VideoCapture: NSObject {
     let videoOutput = AVCaptureVideoDataOutput()
     let queue = DispatchQueue(label: "com.Asif.MachineLearning")
     
+    public var frameInterval = 1
+    var seenFrames = 0
+    
     public func setUp(sessionPreset: AVCaptureSession.Preset = .medium,
                       completion: @escaping (Bool) -> Void) {
         queue.async {
@@ -92,7 +95,12 @@ public class VideoCapture: NSObject {
 
 extension VideoCapture: AVCaptureVideoDataOutputSampleBufferDelegate {
     public func captureOutput(_ output: AVCaptureOutput, didOutput sampleBuffer: CMSampleBuffer, from connection: AVCaptureConnection) {
-        delegate?.videoCapture(self, didCaptureVideoFrame: sampleBuffer)
+        
+        seenFrames += 1
+        if seenFrames >= frameInterval {
+          seenFrames = 0
+            delegate?.videoCapture(self, didCaptureVideoFrame: sampleBuffer)
+        }
     }
     
     public func captureOutput(_ output: AVCaptureOutput, didDrop sampleBuffer: CMSampleBuffer, from connection: AVCaptureConnection) {

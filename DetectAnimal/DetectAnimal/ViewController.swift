@@ -38,13 +38,15 @@ class ViewController: UIViewController {
     func setUpCameraPreview() {
         videoCapture = VideoCapture()
         videoCapture.delegate = self
+        
+        videoCapture.frameInterval = 1
+        
         videoCapture.setUp(sessionPreset: .high) { success in
             if success {
-                guard let previewLayer = self.videoCapture.videoPreviewLayer else {
-                    return
+                if let previewLayer = self.videoCapture.videoPreviewLayer {
+                    self.preview.layer.addSublayer(previewLayer)
+                    self.resizePreviewLayer()
                 }
-                self.preview.layer.addSublayer(previewLayer)
-                self.resizePreviewLayer()
             }
             
             self.videoCapture.start()
@@ -65,15 +67,18 @@ class ViewController: UIViewController {
     }()
     
     fileprivate func setUpVisionRequest() {
-        let request = VNCoreMLRequest(model: visionModel) { (request, error) in
-            if error != nil {
-                return
+        
+        for _ in 0..<ViewController.maxInFlightBuffer {
+            let request = VNCoreMLRequest(model: visionModel) { (request, error) in
+                if error != nil {
+                    return
+                }
+                
+                self.processRequest(request: request)
             }
-            
-            self.processRequest(request: request)
+            request.imageCropAndScaleOption = .centerCrop
+            classificationRequest.append(request)
         }
-        request.imageCropAndScaleOption = .centerCrop
-        classificationRequest.append(request)
     }
     
     fileprivate func processRequest(request: VNRequest) {
@@ -88,17 +93,7 @@ class ViewController: UIViewController {
             }
             
             self.resultsLabel.text = top3.joined(separator: "\n")
-            
-            
-            //previous
-//            self.resultsLabel.text = observations.map
-//                { observation in
-//                let formatter = NumberFormatter()
-//                formatter.maximumFractionDigits = 1
-//                let confidencePercentage = formatter.string(from: observation.confidence * 100 as NSNumber)
-//                return "\(observation.identifier) \(confidencePercentage!)%"
-//            }.joined(separator: "\n")
-//            self.showResultsView()
+
         }
     }
     
@@ -119,13 +114,18 @@ class ViewController: UIViewController {
         }
         
         
-        
         // The semaphore is used to block the VideoCapture queue and drop frames
         // when Core ML can't keep up.
         semaphore.wait()
         
         //TODO:
-        let request = classificationRequest[0]
+        
+        let request = self.classificationRequest[inFlightBuffer]
+        inFlightBuffer += 1
+        if inFlightBuffer >= ViewController.maxInFlightBuffer {
+          inFlightBuffer = 0
+        }
+//        let request = classificationRequest[0]
         
         //For better throughput, perform the handler in background
         //insted of on videoCapture queue
